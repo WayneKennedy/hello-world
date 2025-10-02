@@ -12,13 +12,11 @@ terraform {
     }
   }
   
-  # Use S3 backend with environment-specific state files
-  backend "s3" {
-    # These will be provided via backend config or environment variables
-    # bucket = "your-terraform-state-bucket"
-    # key    = "hello-world/${terraform.workspace}/terraform.tfstate"
-    # region = "us-east-1"
-  }
+  # Use local backend for now (can switch to S3 later)
+  # To use S3 backend, run: terraform init -backend-config=backend-config.hcl
+  # backend "s3" {
+  #   # These will be provided via backend config
+  # }
 }
 
 provider "aws" {
