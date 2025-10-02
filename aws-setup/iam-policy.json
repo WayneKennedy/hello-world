@@ -37,7 +37,11 @@
         "s3:GetLifecycleConfiguration",
         "s3:PutLifecycleConfiguration",
         "s3:GetReplicationConfiguration",
-        "s3:PutReplicationConfiguration"
+        "s3:PutReplicationConfiguration",
+        "s3:GetBucketObjectLockConfiguration",
+        "s3:PutBucketObjectLockConfiguration",
+        "s3:GetObjectLockConfiguration",
+        "s3:PutObjectLockConfiguration"
       ],
       "Resource": "arn:aws:s3:::hello-world-*"
     },
