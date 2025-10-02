@@ -130,15 +130,13 @@ jobs:
         AUTO_APPROVE="${{ github.event.inputs.auto_approve }}"
         ENVIRONMENT="${{ steps.environment-config.outputs.environment }}"
         
-        # Default to true for push events (not manual workflow_dispatch)
+        # Default to true for all environments and events
         if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-          # Only auto-approve dev and test environments from push
-          if [ "$ENVIRONMENT" == "prod" ]; then
-            AUTO_APPROVE="false"
-          else
-            AUTO_APPROVE="true"
-          fi
+          AUTO_APPROVE="true"
         fi
+        
+        # Override to always auto-approve (remove manual approval requirement)
+        AUTO_APPROVE="true"
         
         echo "Auto-approve: $AUTO_APPROVE"
         echo "Environment: $ENVIRONMENT"
