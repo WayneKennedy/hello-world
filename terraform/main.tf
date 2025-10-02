@@ -123,8 +123,8 @@ resource "aws_s3_bucket_website_configuration" "website" {
 
 # CloudFront Origin Access Control
 resource "aws_cloudfront_origin_access_control" "website" {
-  name                              = "hello-world-oac"
-  description                       = "Origin Access Control for Hello World S3 bucket"
+  name                              = "${var.bucket_name}-oac"
+  description                       = "Origin Access Control for ${var.bucket_name} S3 bucket"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
@@ -140,7 +140,7 @@ resource "aws_cloudfront_distribution" "website" {
 
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "Hello World static website"
+  comment             = "${var.bucket_name} static website"
   default_root_object = "index.html"
 
   # Cache behavior for static assets
