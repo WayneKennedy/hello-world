@@ -142,6 +142,14 @@ Once you've completed the above steps:
 
 **❌ "Access denied errors in GitHub Actions"**
 - Solution: Double-check that both GitHub secrets are set correctly and your policy is attached to the user
+- **If you get S3 ACL errors**: Your IAM policy needs to be updated with additional permissions
+
+**🔧 Updating IAM Policy (if you get permission errors):**
+1. Go to [AWS IAM Console](https://console.aws.amazon.com/iam/) → **Policies**
+2. Search for `HelloWorldDeploymentPolicy` → Click on it
+3. Click **"Edit policy"** → Click **"JSON"** tab
+4. Replace the entire JSON with the updated content from `aws-setup/iam-policy.json`
+5. Click **"Next"** → **"Save changes"**
 
 **❌ "Can't see the secret access key"**
 - Solution: You can only see it once. If you missed it, create new access keys from the Security credentials tab
