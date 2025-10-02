@@ -58,6 +58,15 @@
       "Resource": "arn:aws:s3:::hello-world-*/*"
     },
     {
+      "Sid": "S3GlobalAccess",
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListAllMyBuckets",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "CloudFrontAccess",
       "Effect": "Allow",
       "Action": [
