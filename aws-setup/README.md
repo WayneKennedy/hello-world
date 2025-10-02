@@ -236,7 +236,9 @@ Or use the GitHub Actions workflow to automatically clean up resources.
 
 4. **Bucket name conflicts**:
    - S3 bucket names must be globally unique
-   - The workflow uses GitHub run number to ensure uniqueness
+   - S3 bucket names must be lowercase (no uppercase letters)
+   - S3 bucket names cannot contain spaces or special characters
+   - The workflow automatically converts names to lowercase and uses GitHub run number for uniqueness
 
 ### Getting Help:
 
