@@ -6,51 +6,47 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.1"
+    }
   }
   
-  # Optional: Configure remote state storage
-  # backend "s3" {
-  #   bucket = "your-terraform-state-bucket"
-  #   key    = "hello-world/terraform.tfstate"
-  #   region = "us-east-1"
-  # }
+  # Use S3 backend with environment-specific state files
+  backend "s3" {
+    # These will be provided via backend config or environment variables
+    # bucket = "your-terraform-state-bucket"
+    # key    = "hello-world/${terraform.workspace}/terraform.tfstate"
+    # region = "us-east-1"
+  }
 }
 
 provider "aws" {
   region = var.aws_region
 }
 
-# Variables
+# Variables (moved to variables.tf, keeping legacy support)
 variable "bucket_name" {
-  description = "Name of the S3 bucket for static website hosting"
+  description = "Legacy bucket name (will be overridden by environment-specific naming)"
   type        = string
-}
-
-variable "aws_region" {
-  description = "AWS region"
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "environment" {
-  description = "Environment name"
-  type        = string
-  default     = "production"
+  default     = ""
 }
 
 # Data sources
 data "aws_caller_identity" "current" {}
 
-# S3 bucket for static website hosting
+# S3 bucket for static website hosting with environment-specific naming
 resource "aws_s3_bucket" "website" {
-  bucket = var.bucket_name
+  bucket = var.bucket_name != "" ? var.bucket_name : "${local.name_prefix}-${random_id.bucket_suffix.hex}"
   
-  tags = {
-    Name        = "Hello World Static Website"
-    Environment = var.environment
-    Project     = "hello-world"
-    ManagedBy   = "terraform"
-  }
+  tags = merge(local.common_tags, {
+    Name = "${local.name_prefix} Static Website Bucket"
+  })
+}
+
+# Random ID for bucket uniqueness
+resource "random_id" "bucket_suffix" {
+  byte_length = 4
 }
 
 # S3 bucket versioning
@@ -123,8 +119,8 @@ resource "aws_s3_bucket_website_configuration" "website" {
 
 # CloudFront Origin Access Control
 resource "aws_cloudfront_origin_access_control" "website" {
-  name                              = "${var.bucket_name}-oac"
-  description                       = "Origin Access Control for ${var.bucket_name} S3 bucket"
+  name                              = "${local.name_prefix}-oac"
+  description                       = "Origin Access Control for ${local.name_prefix} S3 bucket"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
@@ -140,10 +136,10 @@ resource "aws_cloudfront_distribution" "website" {
 
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "${var.bucket_name} static website"
+  comment             = "${local.name_prefix} static website"
   default_root_object = "index.html"
 
-  # Cache behavior for static assets
+  # Cache behavior for static assets (environment-specific TTL)
   default_cache_behavior {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
@@ -158,12 +154,12 @@ resource "aws_cloudfront_distribution" "website" {
 
     viewer_protocol_policy = "redirect-to-https"
     min_ttl                = 0
-    default_ttl            = 86400   # 1 day
-    max_ttl                = 31536000 # 1 year
+    default_ttl            = local.current_config.cache_ttl_default
+    max_ttl                = local.current_config.cache_ttl_max
     compress               = true
   }
 
-  # Cache behavior for HTML files (shorter cache)
+  # Cache behavior for HTML files (shorter cache for all environments)
   ordered_cache_behavior {
     path_pattern     = "*.html"
     allowed_methods  = ["GET", "HEAD", "OPTIONS"]
@@ -178,13 +174,13 @@ resource "aws_cloudfront_distribution" "website" {
     }
 
     min_ttl                = 0
-    default_ttl            = 300     # 5 minutes
-    max_ttl                = 3600    # 1 hour
+    default_ttl            = 300     # 5 minutes for all environments
+    max_ttl                = 3600    # 1 hour for all environments
     compress               = true
     viewer_protocol_policy = "redirect-to-https"
   }
 
-  price_class = "PriceClass_100"  # Use only North America and Europe edge locations
+  price_class = local.current_config.cloudfront_price_class
 
   restrictions {
     geo_restriction {
@@ -192,12 +188,9 @@ resource "aws_cloudfront_distribution" "website" {
     }
   }
 
-  tags = {
-    Name        = "Hello World CloudFront Distribution"
-    Environment = var.environment
-    Project     = "hello-world"
-    ManagedBy   = "terraform"
-  }
+  tags = merge(local.common_tags, {
+    Name = "${local.name_prefix} CloudFront Distribution"
+  })
 
   viewer_certificate {
     cloudfront_default_certificate = true

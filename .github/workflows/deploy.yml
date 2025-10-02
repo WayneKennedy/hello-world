@@ -61,14 +61,38 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Create valid S3 bucket name
-      id: bucket-name
+    - name: Create environment-specific naming
+      id: environment-config
       run: |
-        # Convert repository owner to lowercase and create valid S3 bucket name
-        OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        BUCKET_NAME="hello-world-${OWNER_LOWER}-${{ github.run_number }}"
+        # Determine environment based on branch or manual input
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          ENVIRONMENT="${{ github.event.inputs.deployment_environment }}"
+        else
+          # Auto-determine environment based on branch
+          case "${{ github.ref }}" in
+            "refs/heads/main")
+              ENVIRONMENT="prod"
+              ;;
+            "refs/heads/develop")
+              ENVIRONMENT="test"
+              ;;
+            *)
+              ENVIRONMENT="dev"
+              ;;
+          esac
+        fi
+        
+        # Create environment-specific bucket name
+        REPO_OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        BUCKET_NAME="hello-world-${ENVIRONMENT}-${REPO_OWNER_LOWER}"
+        
+        echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
         echo "bucket-name=${BUCKET_NAME}" >> $GITHUB_OUTPUT
-        echo "Using S3 bucket name: ${BUCKET_NAME}"
+        echo "terraform-workspace=hello-world-${ENVIRONMENT}" >> $GITHUB_OUTPUT
+        
+        echo "🌍 Environment: ${ENVIRONMENT}"
+        echo "🪣 Bucket: ${BUCKET_NAME}"
+        echo "🔧 Workspace: hello-world-${ENVIRONMENT}"
     
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
@@ -87,21 +111,33 @@ jobs:
       run: |
         cd terraform
         terraform init
+        
+        # Create or select workspace for environment isolation
+        terraform workspace select ${{ steps.environment-config.outputs.terraform-workspace }} || \
+        terraform workspace new ${{ steps.environment-config.outputs.terraform-workspace }}
+        
+        echo "🔧 Using Terraform workspace: $(terraform workspace show)"
     
     - name: Terraform Plan
       run: |
         cd terraform
-        terraform plan -var="bucket_name=${{ steps.bucket-name.outputs.bucket-name }}"
+        terraform plan \
+          -var="environment=${{ steps.environment-config.outputs.environment }}" \
+          -var="bucket_name=${{ steps.environment-config.outputs.bucket-name }}"
     
     - name: Check Auto-Approve Setting
       run: |
         AUTO_APPROVE="${{ github.event.inputs.auto_approve }}"
-        ENVIRONMENT="${{ github.event.inputs.deployment_environment }}"
+        ENVIRONMENT="${{ steps.environment-config.outputs.environment }}"
         
         # Default to true for push events (not manual workflow_dispatch)
         if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-          AUTO_APPROVE="true"
-          ENVIRONMENT="development"
+          # Only auto-approve dev and test environments from push
+          if [ "$ENVIRONMENT" == "prod" ]; then
+            AUTO_APPROVE="false"
+          else
+            AUTO_APPROVE="true"
+          fi
         fi
         
         echo "Auto-approve: $AUTO_APPROVE"
@@ -116,10 +152,14 @@ jobs:
         
         if [ "${{ env.auto_approve }}" == "true" ]; then
           echo "🚀 Auto-approving Terraform changes for ${{ env.deployment_env }} environment"
-          terraform apply -auto-approve -var="bucket_name=${{ steps.bucket-name.outputs.bucket-name }}"
+          terraform apply -auto-approve \
+            -var="environment=${{ steps.environment-config.outputs.environment }}" \
+            -var="bucket_name=${{ steps.environment-config.outputs.bucket-name }}"
         else
-          echo "⚠️  Manual approval required - generating plan file"
-          terraform plan -out=tfplan -var="bucket_name=${{ steps.bucket-name.outputs.bucket-name }}"
+          echo "⚠️  Manual approval required for ${{ env.deployment_env }} environment"
+          terraform plan -out=tfplan \
+            -var="environment=${{ steps.environment-config.outputs.environment }}" \
+            -var="bucket_name=${{ steps.environment-config.outputs.bucket-name }}"
           echo "❌ Deployment halted - manual approval required"
           echo "📋 Review the plan above and re-run with auto_approve=true if approved"
           exit 1
