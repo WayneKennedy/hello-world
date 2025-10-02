@@ -6,6 +6,24 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      auto_approve:
+        description: 'Auto-approve Terraform changes'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      deployment_environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - 'development'
+          - 'staging'
+          - 'production'
 
 env:
   AWS_REGION: us-east-1
@@ -75,11 +93,38 @@ jobs:
         cd terraform
         terraform plan -var="bucket_name=${{ steps.bucket-name.outputs.bucket-name }}"
     
+    - name: Check Auto-Approve Setting
+      run: |
+        AUTO_APPROVE="${{ github.event.inputs.auto_approve }}"
+        ENVIRONMENT="${{ github.event.inputs.deployment_environment }}"
+        
+        # Default to true for push events (not manual workflow_dispatch)
+        if [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+          AUTO_APPROVE="true"
+          ENVIRONMENT="development"
+        fi
+        
+        echo "Auto-approve: $AUTO_APPROVE"
+        echo "Environment: $ENVIRONMENT"
+        echo "auto_approve=$AUTO_APPROVE" >> $GITHUB_ENV
+        echo "deployment_env=$ENVIRONMENT" >> $GITHUB_ENV
+    
     - name: Terraform Apply
       id: terraform
       run: |
         cd terraform
-        terraform apply -auto-approve -var="bucket_name=${{ steps.bucket-name.outputs.bucket-name }}"
+        
+        if [ "${{ env.auto_approve }}" == "true" ]; then
+          echo "🚀 Auto-approving Terraform changes for ${{ env.deployment_env }} environment"
+          terraform apply -auto-approve -var="bucket_name=${{ steps.bucket-name.outputs.bucket-name }}"
+        else
+          echo "⚠️  Manual approval required - generating plan file"
+          terraform plan -out=tfplan -var="bucket_name=${{ steps.bucket-name.outputs.bucket-name }}"
+          echo "❌ Deployment halted - manual approval required"
+          echo "📋 Review the plan above and re-run with auto_approve=true if approved"
+          exit 1
+        fi
+        
         echo "bucket-name=$(terraform output -raw bucket_name)" >> $GITHUB_OUTPUT
         echo "cloudfront-distribution-id=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
 
